@@ -1,0 +1,74 @@
+antlr4-python3-runtime==4.8
+bitarray==2.7.6
+brotlipy==0.7.0
+cachetools==5.3.1
+certifi @ file:///croot/certifi_1683875369620/work/certifi
+cffi @ file:///opt/conda/conda-bld/cffi_1642701102775/work
+cfgv==3.3.1
+chardet==5.1.0
+charset-normalizer @ file:///tmp/build/80754af9/charset-normalizer_1630003229654/work
+click==8.1.6
+colorama==0.4.6
+cryptography @ file:///croot/cryptography_1677533068310/work
+Cython==3.0.0
+distlib==0.3.7
+et-xmlfile==1.1.0
+fairseq==0.12.2
+filelock==3.12.2
+flashlight-text==0.0.4
+fsspec==2023.6.0
+gmpy2 @ file:///tmp/build/80754af9/gmpy2_1645438755360/work
+huggingface-hub==0.16.4
+hydra-core==1.0.7
+identify==2.5.25
+idna @ file:///croot/idna_1666125576474/work
+Jinja2 @ file:///croot/jinja2_1666908132255/work
+libretranslatepy==2.1.1
+lxml==4.9.3
+MarkupSafe @ file:///opt/conda/conda-bld/markupsafe_1654597864307/work
+mkl-fft==1.3.0
+mkl-random==1.0.2
+mkl-service==2.3.0
+mpmath==1.2.1
+networkx @ file:///croot/networkx_1678964333703/work
+nodeenv==1.8.0
+numpy==1.25.1
+omegaconf==2.0.6
+openpyxl==3.1.2
+packaging==23.1
+pandas==2.0.3
+Pillow==9.0.1
+platformdirs==3.9.1
+pluggy==1.2.0
+portalocker==2.7.0
+pre-commit==3.3.3
+protobuf==4.23.4
+pycparser @ file:///tmp/build/80754af9/pycparser_1636541352034/work
+pyOpenSSL @ file:///croot/pyopenssl_1677607685877/work
+pyproject-api==1.5.3
+PySocks @ file:///tmp/build/80754af9/pysocks_1605305812635/work
+python-dateutil==2.8.2
+pytz==2023.3
+PyYAML==6.0.1
+regex==2023.6.3
+requests @ file:///croot/requests_1682607517574/work
+sacrebleu==2.3.1
+safetensors==0.3.1
+six @ file:///tmp/build/80754af9/six_1644875935023/work
+sympy @ file:///croot/sympy_1668202399572/work
+tabulate==0.9.0
+tensorboardX==2.6.1
+tokenizers==0.13.3
+tomli==2.0.1
+torch==2.0.1
+torchaudio==2.0.2
+torchvision==0.15.2
+tox==4.6.4
+tqdm==4.65.0
+transformers==4.31.0
+translate==3.5.0
+translate-toolkit==3.9.2
+typing_extensions @ file:///croot/typing_extensions_1686601443660/work
+tzdata==2023.3
+urllib3 @ file:///croot/urllib3_1686163155763/work
+virtualenv==20.24.0
