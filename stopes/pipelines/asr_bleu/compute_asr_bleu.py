@@ -1,52 +1,45 @@
-from dataclasses import dataclass, field
 import typing as tp
 import asyncio
 import logging
 from pathlib import Path
 import sacrebleu
 import pandas as pd
+from stopes.pipelines.asr_bleu.configs import AsrBleuConfig
 from tqdm import tqdm
 from glob import glob
 from stopes.pipelines.asr_bleu.utils import retrieve_asr_config, ASRGenerator
 import os
 import hydra
+from omegaconf import OmegaConf
 
 logger = logging.getLogger("asr_bleu")
 
 
-@dataclass
-class AsrBleuConfig:
-    lang: str
-    audio_dirpath: str
-    reference_path: str
-    reference_format: str
-    asr_version: str = "oct22"
-    reference_tsv_column: str = None
-    audio_format: str = "n_pred.wav"
-    results_dirpath: str = None
-    transcripts_path: str = None
+
 
 class AsrBleu:
     def __init__(self, config: AsrBleuConfig):
         self.config = config
+        # OmegaConf.save(config=config, f=str(self.output_dir / "asr_bleu.yaml"),)
+        # self.launcher = hydra.utils.instantiate(self.config.launcher)
 
     async def run(self):
         # 1. Retrieve ASR configuration 
 
-        asr_config = retrieve_asr_config(self.config.lang, self.config.asr_version, json_path="/home/john/Desktop/STOPES/stopes/stopes/pipelines/asr_bleu/conf/asr_models/asr_model_cfgs.json")
+        asr_config = retrieve_asr_config(self.config.corpora.lang, self.config.corpora.asr_version, json_path="/home/john/Desktop/STOPES/stopes/stopes/pipelines/asr_bleu/conf/asr_models/asr_model_cfgs.json")
         asr_model = ASRGenerator(asr_config)
-        print("Lang key:", self.config.lang)
-        print("Audio_dirpath:", self.config.audio_dirpath)
-        print("Reference path:", self.config.reference_path)
+        print("Lang key:", self.config.corpora.lang)
+        print("Audio_dirpath:", self.config.corpora.audio_dirpath)
+        print("Reference path:", self.config.corpora.reference_path)
 
 
         # 2. Compose evaluation data.
         eval_manifest = compose_eval_data(
-            audio_dirpath=self.config.audio_dirpath,
-            audio_format=self.config.audio_format,
-            references_filepath=self.config.reference_path,
-            reference_format=self.config.reference_format,
-            reference_tsv_column=self.config.reference_tsv_column,
+            audio_dirpath=self.config.corpora.audio_dirpath,
+            audio_format=self.config.corpora.audio_format,
+            references_filepath=self.config.corpora.reference_path,
+            reference_format=self.config.corpora.reference_format,
+            reference_tsv_column=self.config.corpora.reference_tsv_column,
             save_manifest_filepath=None,
         )
 
@@ -60,7 +53,7 @@ class AsrBleu:
             transcription = await asr_model.transcribe_audiofile(eval_pair.prediction)
             prediction_transcripts.append(transcription.lower())
 
-        if self.config.lang == "hok":
+        if self.config.corpora.lang == "hok":
             prediction_transcripts = [
                 merge_tailo_init_final(text) for text in prediction_transcripts
             ]
