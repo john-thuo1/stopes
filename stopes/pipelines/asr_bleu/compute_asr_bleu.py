@@ -8,6 +8,7 @@ from stopes.pipelines.asr_bleu.configs import AsrBleuConfig
 from tqdm import tqdm
 from glob import glob
 from stopes.pipelines.asr_bleu.utils import retrieve_asr_config, ASRGenerator
+from stopes.pipelines.asr_bleu.transcribe_audio import transcribe_audiofile
 import os
 import hydra
 from omegaconf import OmegaConf
@@ -28,9 +29,7 @@ class AsrBleu:
 
         asr_config = retrieve_asr_config(self.config.corpora.lang, self.config.corpora.asr_version, json_path="/home/john/Desktop/STOPES/stopes/stopes/pipelines/asr_bleu/conf/asr_models/asr_model_cfgs.json")
         asr_model = ASRGenerator(asr_config)
-        print("Lang key:", self.config.corpora.lang)
-        print("Audio_dirpath:", self.config.corpora.audio_dirpath)
-        print("Reference path:", self.config.corpora.reference_path)
+
 
 
         # 2. Compose evaluation data.
@@ -50,7 +49,7 @@ class AsrBleu:
             desc="Transcribing predictions",
             total=len(eval_manifest),
         ):
-            transcription = await asr_model.transcribe_audiofile(eval_pair.prediction)
+            transcription = await transcribe_audiofile(asr_model,eval_pair.prediction)
             prediction_transcripts.append(transcription.lower())
 
         if self.config.corpora.lang == "hok":
