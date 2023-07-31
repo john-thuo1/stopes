@@ -6,7 +6,7 @@ from fairseq.data.data_utils import lengths_to_padding_mask
 
 
 
-@torch.inference_mode()
+# @torch.inference_mode()
 async def load_audiofile(audio_path: str, sample_rate: int, normalize_input: bool) -> torch.Tensor:
     """
     Load the audio files and apply resampling and normalization
@@ -92,6 +92,7 @@ async def transcribe_audiofile(asr_model,audio_path: str, lower=True) -> str:
     """
 
     asr_input = await load_audiofile(audio_path, asr_model.sampling_rate, asr_model.normalize_input)
+
     emissions = compute_emissions(asr_input, asr_model.model, asr_model.use_cuda)
     hypo = decode_emissions(emissions, asr_model.decoder, asr_model.post_process_fn)
 
