@@ -7,7 +7,7 @@ import pandas as pd
 from stopes.pipelines.asr_bleu.configs import AsrBleuConfig
 from tqdm import tqdm
 from glob import glob
-from stopes.pipelines.asr_bleu.utils import retrieve_asr_config, ASRGenerator
+from stopes.pipelines.asr_bleu.asr_generator import retrieve_asr_config, ASRGenerator
 from stopes.pipelines.asr_bleu.transcribe_audio import transcribe_audiofile
 import os
 import hydra
