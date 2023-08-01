@@ -1,1 +1,4 @@
-corpora: ???
+defaults:
+  - testing: eng_test.yaml
+  
+corpora:  ???
