@@ -1,12 +1,8 @@
-import json
 import re
 import urllib.request
 from pathlib import Path
-# import asyncio
-
 import fairseq
 import torch
-# from fairseq.data.data_utils import lengths_to_padding_mask
 from tqdm import tqdm
 
 try:
@@ -26,15 +22,6 @@ class DownloadProgressBar(tqdm):
         if tsize is not None:
             self.total = tsize
         self.update(b * bsize - self.n)
-
-
-def retrieve_asr_config(lang_key: str, asr_version: str, json_path: str) -> dict:
-    if len(lang_key) !=3:
-        raise ValueError(f"'{lang_key}' lang key for language type must be 3 characters!")
-
-    with open(json_path, "r") as f:
-        asr_model_cfgs = json.load(f)
-    return asr_model_cfgs[lang_key][asr_version]
 
 
 class ASRGenerator(object):
