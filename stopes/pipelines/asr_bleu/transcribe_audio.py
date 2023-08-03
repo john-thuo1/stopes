@@ -1,99 +1,217 @@
 import asyncio
+from stopes.pipelines.asr_bleu.retrieve_data import RetrieveDataConfig
 import torch
+import typing as tp
 import torchaudio
 import fairseq
+import logging
+import pandas as pd
+from tqdm import tqdm
+from dataclasses import dataclass
 from fairseq.data.data_utils import lengths_to_padding_mask
+from omegaconf.omegaconf import MISSING
+from stopes.core import utils
+from stopes.core.launcher import Launcher
+from stopes.core.stopes_module import Requirements, StopesModule
+from stopes.pipelines.asr_bleu.configs import CorporaConfig, AsrBleuConfig
+
+@dataclass
+class TranscribeAudioJob:
+    eval_manifest: tp.Any = MISSING
+    asr_model : tp.Any = MISSING
+
+
+@dataclass
+class TranscribeAudioConfig:
+    transcribe_audio_jobs: tp.List[TranscribeAudioJob] = MISSING
 
 
 
-# @torch.inference_mode()
-async def load_audiofile(audio_path: str, sample_rate: int, normalize_input: bool) -> torch.Tensor:
-    """
-    Load the audio files and apply resampling and normalization
+class TranscribeAudio(StopesModule):
+    def __init__(self, config:TranscribeAudioConfig):
+        super().__init__(config=config, config_class=TranscribeAudioConfig)
 
-    Args:
-        audio_path: the audio file path
-        sample_rate: the target sampling rate for the ASR model
-        normalize_input: the bool value for the ASR model
+    def array(self):
+        return self.config.transcribe_audio_jobs
+    
+    def requirements(self) -> Requirements:
+        return Requirements(
+            nodes=1,
+            tasks_per_node=1,
+            gpus_per_node=0,
+            cpus_per_task=1,
+            timeout_min=720,
+        )
+                  
+    @torch.inference_mode()
+    def _load_audiofile(self,audio_path: str, sample_rate: int, normalize_input: bool) -> torch.Tensor:
+        """
+        Load the audio files and apply resampling and normalization
 
-    Returns:
-        audio_waveform: the audio waveform as a torch.Tensor object
-    """
-    audio_waveform, sampling_rate = await asyncio.to_thread(torchaudio.load, audio_path)
-    if audio_waveform.dim == 2:
-        audio_waveform = audio_waveform.mean(-1)
-    if sample_rate != sampling_rate:
-        audio_waveform = torchaudio.functional.resample(audio_waveform, sampling_rate, sample_rate)
-    if normalize_input:
-        # following fairseq raw audio dataset
-        audio_waveform = torch.nn.functional.layer_norm(audio_waveform, audio_waveform.shape)
+        Args:
+            audio_path: the audio file path
+            sample_rate: the target sampling rate for the ASR model
+            normalize_input: the bool value for the ASR model
 
-    return audio_waveform
+        Returns:
+            audio_waveform: the audio waveform as a torch.Tensor object
+        """
+        audio_waveform, sampling_rate = torchaudio.load, audio_path
+        if audio_waveform.dim == 2:
+            audio_waveform = audio_waveform.mean(-1)
+        if sample_rate != sampling_rate:
+            audio_waveform = torchaudio.functional.resample(audio_waveform, sampling_rate, sample_rate)
+        if normalize_input:
+            # following fairseq raw audio dataset
+            audio_waveform = torch.nn.functional.layer_norm(audio_waveform, audio_waveform.shape)
 
-
-@torch.inference_mode()
-def compute_emissions(audio_input: torch.Tensor, asr_model: fairseq.models.FairseqEncoder, cuda) -> torch.Tensor:
-    """
-    Compute the emissions for either fairseq or huggingface asr model
-
-    Args:
-        audio_input: the input audio waveform
-        asr_model: the ASR model to use for computing emissions
-
-    Returns:
-        emissions: the logits of the encoded prediction.
-    """
-
-    if cuda:
-        audio_input = audio_input.to("cuda")
-    if isinstance(asr_model, fairseq.models.wav2vec.wav2vec2_asr.Wav2VecCtc):
-        padding_mask = lengths_to_padding_mask(torch.tensor([audio_input.numel()]))
-        emissions = asr_model.w2v_encoder(audio_input, padding_mask)["encoder_out"].transpose(0, 1)
-    else:
-        emissions = asr_model(audio_input).logits
-
-    return emissions
+        return audio_waveform
 
 
-def decode_emissions(emissions: torch.Tensor, decoder, post_process_fn) -> str:
-    """
-    Decode the emissions and apply post-process functions
+    @torch.inference_mode()
+    def _compute_emissions(self,audio_input: torch.Tensor, asr_model: fairseq.models.FairseqEncoder, cuda) -> torch.Tensor:
+        """
+        Compute the emissions for either fairseq or huggingface asr model
 
-    Args:
-        emissions: the input Tensor object
-        decoder: ASR decoder
-        post_process_fn: post-process function for the ASR output
+        Args:
+            audio_input: the input audio waveform
+            asr_model: the ASR model to use for computing emissions
 
-    Returns:
-        hypo: the str as the decoded transcriptions
-    """
+        Returns:
+            emissions: the logits of the encoded prediction.
+        """
 
-    emissions = emissions.cpu()
-    results = decoder(emissions)
+        if cuda:
+            audio_input = audio_input.to("cuda")
+        if isinstance(asr_model, fairseq.models.wav2vec.wav2vec2_asr.Wav2VecCtc):
+            padding_mask = lengths_to_padding_mask(torch.tensor([audio_input.numel()]))
+            emissions = asr_model.w2v_encoder(audio_input, padding_mask)["encoder_out"].transpose(0, 1)
+        else:
+            emissions = asr_model(audio_input).logits
 
-    # assuming the lexicon-free decoder and working with tokens
-    hypo = decoder.idxs_to_tokens(results[0][0].tokens)
-    hypo = post_process_fn(hypo)
-
-    return hypo
+        return emissions
 
 
-async def transcribe_audiofile(asr_model,audio_path: str, lower=True) -> str:
-    """
-    Transcribe the audio into a string
+    def _decode_emissions(self,emissions: torch.Tensor, decoder, post_process_fn) -> str:
+        """
+        Decode the emissions and apply post-process functions
 
-    Args:
-        model_cfg: the dict of the asr model config
-        audio_path: the input audio waveform
-        lower: the case of the transcriptions with lowercase as the default
+        Args:
+            emissions: the input Tensor object
+            decoder: ASR decoder
+            post_process_fn: post-process function for the ASR output
 
-    Returns:
-        hypo: the transcription result
-    """
+        Returns:
+            hypo: the str as the decoded transcriptions
+        """
 
-    asr_input = await load_audiofile(audio_path, asr_model.sampling_rate, asr_model.normalize_input)
+        emissions = emissions.cpu()
+        results = decoder(emissions)
 
-    emissions = compute_emissions(asr_input, asr_model.model, asr_model.use_cuda)
-    hypo = decode_emissions(emissions, asr_model.decoder, asr_model.post_process_fn)
+        # assuming the lexicon-free decoder and working with tokens
+        hypo = decoder.idxs_to_tokens(results[0][0].tokens)
+        hypo = post_process_fn(hypo)
 
-    return hypo.strip().lower() if lower else hypo.strip()
+        return hypo
+    def merge_tailo_init_final(self, text):
+        """
+        Hokkien ASR hypothesis post-processing.
+        """
+        sps = text.strip().split()
+        results = []
+        last_syllable = ""
+        for sp in sps:
+            if sp == "NULLINIT" or sp == "nullinit":
+                continue
+            last_syllable += sp
+            if sp[-1].isnumeric():
+                results.append(last_syllable)
+                last_syllable = ""
+        if last_syllable != "":
+            results.append(last_syllable)
+        return " ".join(results)
+
+
+    def remove_tone(self, text):
+        """
+        Used for tone-less evaluation of Hokkien
+        """
+        return " ".join([t[:-1] for t in text.split()])
+    
+
+    def transcribe_audio(self,  
+        asr_model,
+        audio_path: str, 
+        lower=True) -> str:
+
+    
+        """
+        Transcribe the audio into a string
+
+        Args:
+            model_cfg: the dict of the asr model config
+            audio_path: the input audio waveform
+            lower: the case of the transcriptions with lowercase as the default
+
+        Returns:
+            hypo: the transcription result
+        """
+
+        asr_input = self._load_audiofile(audio_path, asr_model.sampling_rate, asr_model.normalize_input)
+        emissions = self._compute_emissions(asr_input, asr_model.model, asr_model.use_cuda)
+        hypo = self._decode_emissions(emissions, asr_model.decoder, asr_model.post_process_fn)
+
+        return hypo.strip().lower() if lower else hypo.strip()
+
+
+    def run(self, 
+            iteration_value: tp.Optional[tp.Any] = None,
+            iteration_index: int = 0,
+            ) -> tp.List[str]:
+        
+        assert iteration_value is not None, "Iteration value is null"
+        self.logger = logging.getLogger("stopes.asr_bleu.transcribe_audio")
+        self.logger.info(f"Transcribing audio file from {iteration_value.audio_path}")
+        prediction_transcripts = []
+        for _,  eval_pair in tqdm(
+            iteration_value.eval_manifest.iterrows(),
+            desc="Transcribing predictions",
+            total=len(iteration_value.eval_manifest),
+        ):
+            transcription = self.transcribe_audiofile(
+                    iteration_value.asr_model,eval_pair.prediction)
+            
+            prediction_transcripts.append(transcription.lower())
+        
+        if self.config.corpora.lang == "hok":
+            prediction_transcripts = [
+                self.merge_tailo_init_final(text) for text in prediction_transcripts
+            ]
+        
+        return prediction_transcripts
+        
+    
+
+    
+async def transcribe_audio(   
+    asr_model,
+    launcher: Launcher, 
+    eval_manifests: tp.List[pd.DataFrame], 
+    lower=True) -> tp.List[tp.List[str]]:
+
+    transcribe_audio_jobs = [
+        TranscribeAudioJob(
+            eval_manifest= eval_manifest,
+            asr_model=asr_model,
+
+
+        ) for eval_manifest in eval_manifests
+    ]
+    transcribe_audio_module = TranscribeAudio(
+        TranscribeAudioConfig(
+         transcribe_audio_jobs=transcribe_audio_jobs,
+        )
+    )
+    transcribed_audio = await launcher.schedule(transcribe_audio_module)
+   
+    return transcribed_audio
