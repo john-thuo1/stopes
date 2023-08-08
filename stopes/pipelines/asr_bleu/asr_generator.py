@@ -3,6 +3,8 @@ import urllib.request
 from pathlib import Path
 import fairseq
 import torch
+import json
+import typing as tp
 from tqdm import tqdm
 
 try:
@@ -23,6 +25,13 @@ class DownloadProgressBar(tqdm):
             self.total = tsize
         self.update(b * bsize - self.n)
 
+def retrieve_asr_config(lang_key: str, asr_version: str, json_path: str) -> tp.Dict[str,str]:
+    if len(lang_key) !=3:
+        raise ValueError(f"'{lang_key}' lang key for language type must be 3 characters!")
+
+    with open(json_path, "r") as f:
+        asr_model_cfgs = json.load(f)
+    return asr_model_cfgs[lang_key][asr_version]
 
 class ASRGenerator(object):
     """A class to represent a ASR generator"""
@@ -151,7 +160,7 @@ class ASRGenerator(object):
                         url, filename=download_path.as_posix(), reporthook=t.update_to
                     )
             else:
-                print(f"'{url}' exists in {cache_dir}")
+                self.logger.info(f"'{url}' exists in {cache_dir}")
 
             return download_path.as_posix()
 
@@ -190,7 +199,7 @@ class ASRGenerator(object):
             self.sil_token = tokens[
                 2
             ]  # use eos as silence token if | not presented e.g., Hok ASR model
-        print(f"Inferring silence token from the dict: {self.sil_token}")
+        self.logger.info(f"Inferring silence token from the dict: {self.sil_token}")
         self.blank_token = self.tokens[0]
 
         self.sampling_rate = saved_cfg.task.sample_rate
