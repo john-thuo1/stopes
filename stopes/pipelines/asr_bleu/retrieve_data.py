@@ -1,28 +1,14 @@
-from pathlib import Path
-import pandas as pd
-from glob import glob
 import os
-import json
-
+import logging
 import typing as tp
 import pandas as pd
 from dataclasses import dataclass
 from pathlib import Path
+from glob import glob
 from omegaconf.omegaconf import MISSING
 
 from stopes.core.launcher import Launcher
 from stopes.core.stopes_module import Requirements, StopesModule
-from stopes.pipelines.filtering.dataset import Dataset
-import logging
-
-def retrieve_asr_config(lang_key: str, asr_version: str, json_path: str) -> dict:
-    if len(lang_key) !=3:
-        raise ValueError(f"'{lang_key}' lang key for language type must be 3 characters!")
-
-    with open(json_path, "r") as f:
-        asr_model_cfgs = json.load(f)
-    return asr_model_cfgs[lang_key][asr_version]
-
 
 @dataclass
 class RetrieveDataJob:
@@ -55,7 +41,8 @@ class RetrieveData(StopesModule):
             timeout_min=24 * 60,
         )
     
-    def _extract_audio_for_eval(audio_dirpath: str, audio_format: str):
+    def _extract_audio_for_eval(self, audio_dirpath: str, audio_format: str):
+        """Extract audio file paths for subsequent transcription"""
         if audio_format == "n_pred.wav":
             """
             The assumption here is that 0_pred.wav corresponds to the reference at line position 0 from the reference manifest
@@ -86,9 +73,8 @@ class RetrieveData(StopesModule):
 
         return audio_list
     
-    def _extract_text_for_eval(
-        references_filepath: str, reference_format: str, reference_tsv_column: str = None
-    ):
+    def _extract_text_for_eval(self, references_filepath: str, reference_format: str, reference_tsv_column: str = None):
+        """Extract sentences for reference"""
         if reference_format == "txt":
             reference_sentences = open(references_filepath, "r").readlines()
             reference_sentences = [l.strip() for l in reference_sentences]
@@ -104,7 +90,8 @@ class RetrieveData(StopesModule):
     def run(self,
             iteration_value: tp.Optional[tp.Any] = None,
             iteration_index: int = 0,
-    ) -> pd.DataFrame:
+    ) -> tp.Dict[str, tp.List]:
+        """Retrieves data for each RetrieveDataJob"""
         assert iteration_value is not None, "iteration value is null"
         self.logger = logging.getLogger("stopes.asr_bleu.prepare_data")
 
@@ -116,31 +103,30 @@ class RetrieveData(StopesModule):
             iteration_value.reference_path, iteration_value.reference_format, iteration_value.reference_tsv_column
         )
 
-        eval_df = pd.DataFrame(
-            {
-                "prediction": audio_list,
-                "reference": reference_sentences,
-            }
-        )
+        eval_manifest = {
+            "prediction": audio_list,
+            "reference": reference_sentences,
+        }
 
-        return eval_df
+        return eval_manifest
 
 
 async def retrieve_data(
-    datasets: tp.List[tp.Tuple[str, str]],
+    datasets: tp.List[tp.Tuple[str, str, str, str, str]],
     launcher: Launcher,
-    audio_format: str,
-    reference_format: str,
-    reference_tsv_column: str,
 ):
-    
+    """
+    Retrieve data for transcription
+    Returns a list of type dict[str, list]
+    Datasets are a 5 tuple: (audio_path, reference_path, audio_format, reference_format, reference_tsv_column)
+    """
     retrieve_data_jobs = [
         RetrieveDataJob(
             audio_path=dataset[0], 
             reference_path=dataset[1], 
-            audio_format=audio_format, 
-            reference_format=reference_format, 
-            reference_tsv_column=reference_tsv_column,
+            audio_format=dataset[2], 
+            reference_format=dataset[3], 
+            reference_tsv_column=dataset[4],
         ) for dataset in datasets
     ]
     retrieve_data_module = RetrieveData(
@@ -150,7 +136,3 @@ async def retrieve_data(
     )
     retrieved_datasets = await launcher.schedule(retrieve_data_module)
     return retrieved_datasets
-
-
-
-
