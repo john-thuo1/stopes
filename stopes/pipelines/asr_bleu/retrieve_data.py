@@ -9,6 +9,7 @@ from omegaconf.omegaconf import MISSING
 
 from stopes.core.launcher import Launcher
 from stopes.core.stopes_module import Requirements, StopesModule
+from stopes.core.utils import open
 
 @dataclass
 class RetrieveDataJob:
@@ -26,7 +27,7 @@ class RetrieveData(StopesModule):
     def __init__(self, 
                  config: RetrieveDataConfig
     ):
-        print(config)
+        
         super().__init__(config=config, config_class=RetrieveDataConfig)
 
     def array(self):
@@ -93,7 +94,7 @@ class RetrieveData(StopesModule):
     ) -> tp.Dict[str, tp.List]:
         """Retrieves data for each RetrieveDataJob"""
         assert iteration_value is not None, "iteration value is null"
-        self.logger = logging.getLogger("stopes.asr_bleu.prepare_data")
+        self.logger = logging.getLogger("stopes.asr_bleu.retrieve_data")
 
         self.logger.info(f"Retrieving audio data from {iteration_value.audio_path}")
         audio_list = self._extract_audio_for_eval(iteration_value.audio_path, iteration_value.audio_format)
