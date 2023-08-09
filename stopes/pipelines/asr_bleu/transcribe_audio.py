@@ -106,7 +106,7 @@ class TranscribeAudio(StopesModule):
 
         return hypo
 
-    def _merge_tailo_init_final(self, text):
+    def _merge_tailo_init_final(self, text) -> tp.List[str]:
         """
         Hokkien ASR hypothesis post-processing.
         """
@@ -124,7 +124,7 @@ class TranscribeAudio(StopesModule):
             results.append(last_syllable)
         return " ".join(results)
 
-    def _remove_tone(self, text):
+    def _remove_tone(self, text) -> str:
         """
         Used for tone-less evaluation of Hokkien
         """
@@ -181,7 +181,7 @@ async def transcribe_audio(
     eval_manifests: tp.List[tp.Dict[str, tp.List]],
     launcher: Launcher,
     asr_config,
-):
+) -> tp.List[tp.List[str]]:
     """
     Transcribes audio from a list of audio files
     Returns a list of lists of transcriptions
