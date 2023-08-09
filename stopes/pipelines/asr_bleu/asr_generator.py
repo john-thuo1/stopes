@@ -5,6 +5,7 @@ import fairseq
 import torch
 import json
 import typing as tp
+import logging
 from tqdm import tqdm
 
 try:
@@ -160,6 +161,7 @@ class ASRGenerator(object):
                         url, filename=download_path.as_posix(), reporthook=t.update_to
                     )
             else:
+                self.logger = logging.getLogger("stopes.asr_bleu.asr_generator")
                 self.logger.info(f"'{url}' exists in {cache_dir}")
 
             return download_path.as_posix()
