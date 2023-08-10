@@ -1,3 +1,7 @@
+defaults:
+  - testing: fra_test.yaml
+  - _self_
+
 launcher:
   _target_: stopes.core.Launcher
   log_folder: executor_logs
@@ -5,11 +9,9 @@ launcher:
   partition: null
   cache:
     _target_: stopes.core.FileCache
-    caching_dir: /tmp/stopes_cache
+    caching_dir: ${output_dir}/cache # /tmp/stopes_cache
   max_jobarray_jobs: 1000
 
-defaults:
-  - testing: eng_test.yaml
-  - _self_
+output_dir: ???
   
 corpora:  ???
