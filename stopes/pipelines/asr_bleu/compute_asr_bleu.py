@@ -2,7 +2,7 @@ import asyncio
 import logging
 
 from stopes.pipelines.asr_bleu.configs import AsrBleuConfig
-from stopes.pipelines.asr_bleu.asr_generator import retrieve_asr_config
+from stopes.pipelines.asr_bleu.utils import retrieve_asr_config
 from stopes.pipelines.asr_bleu.transcribe_audio import transcribe_audio
 from stopes.pipelines.asr_bleu.retrieve_data import retrieve_data
 from stopes.core import utils
