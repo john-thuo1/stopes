@@ -21,6 +21,7 @@ class RetrieveDataJob:
 
 @dataclass
 class RetrieveDataConfig:
+    output_dir: Path
     retrieve_data_jobs: tp.List[RetrieveDataJob] = MISSING
 
 class RetrieveData(StopesModule):
@@ -113,8 +114,10 @@ class RetrieveData(StopesModule):
 
 
 async def retrieve_data(
+    # self.config.corpora: 
     datasets: tp.List[tp.Tuple[str, str, str, str, str]],
     launcher: Launcher,
+    output_dir: Path,
 ):
     """
     Retrieve data for transcription
@@ -132,6 +135,7 @@ async def retrieve_data(
     ]
     retrieve_data_module = RetrieveData(
         RetrieveDataConfig(
+            output_dir=output_dir,
             retrieve_data_jobs=retrieve_data_jobs,
         )
     )
