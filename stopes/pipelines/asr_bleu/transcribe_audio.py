@@ -10,7 +10,7 @@ from fairseq.data.data_utils import lengths_to_padding_mask
 from omegaconf.omegaconf import MISSING
 from stopes.core.launcher import Launcher
 from stopes.core.stopes_module import Requirements, StopesModule
-from stopes.pipelines.asr_bleu.asr_generator import ASRGenerator
+from stopes.pipelines.asr_bleu.utils import ASRGenerator
 
 @dataclass
 class TranscribeAudioJob:
@@ -165,7 +165,10 @@ class TranscribeAudio(StopesModule):
 
         prediction_transcripts = []
  
-        for prediction in iteration_value.eval_manifest["prediction"]:
+        for prediction in tqdm(
+            iterable = iteration_value.eval_manifest["prediction"],
+            desc="Transcribing predictions",
+            total=len(iteration_value.eval_manifest["prediction"]),):
             self.logger.info(f"Transcribing {prediction}")
             transcription = self._transcribe_audiofile(asr_model, prediction)
             prediction_transcripts.append(transcription.lower())
