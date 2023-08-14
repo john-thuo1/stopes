@@ -1,4 +1,3 @@
-import asyncio
 import torch
 import typing as tp
 import torchaudio
@@ -6,20 +5,26 @@ import fairseq
 import logging
 from tqdm import tqdm
 from dataclasses import dataclass
+
 from fairseq.data.data_utils import lengths_to_padding_mask
 from omegaconf.omegaconf import MISSING
+
 from stopes.core.launcher import Launcher
 from stopes.core.stopes_module import Requirements, StopesModule
-from stopes.pipelines.asr_bleu.utils import ASRGenerator
+from stopes.pipelines.asr_bleu.utils import ASRContainer, retrieve_asr_config
+
 
 @dataclass
 class TranscribeAudioJob:
     eval_manifest: tp.Dict[str, tp.List] = MISSING
-    asr_config: tp.Dict = MISSING
+    lang: str = MISSING
+    asr_version: str = MISSING
+
 
 @dataclass
 class TranscribeAudioConfig:
     transcribe_audio_jobs: tp.List[TranscribeAudioJob] = MISSING
+
 
 class TranscribeAudio(StopesModule):
     def __init__(self, config: TranscribeAudioConfig):
@@ -27,7 +32,7 @@ class TranscribeAudio(StopesModule):
 
     def array(self):
         return self.config.transcribe_audio_jobs
-    
+
     def requirements(self) -> Requirements:
         return Requirements(
             nodes=1,
@@ -36,9 +41,14 @@ class TranscribeAudio(StopesModule):
             cpus_per_task=1,
             timeout_min=24*60,
         )
-                  
+
     @torch.inference_mode()
-    def _load_audiofile(self, audio_path: str, sample_rate: int, normalize_input: bool) -> torch.Tensor:
+    def _load_audiofile(
+        self,
+        audio_path: str,
+        sample_rate: int,
+        normalize_input: bool
+    ) -> torch.Tensor:
         """
         Load the audio files and apply resampling and normalization
 
@@ -54,14 +64,27 @@ class TranscribeAudio(StopesModule):
         if audio_waveform.dim == 2:
             audio_waveform = audio_waveform.mean(-1)
         if sample_rate != sampling_rate:
-            audio_waveform = torchaudio.functional.resample(audio_waveform, sampling_rate, sample_rate)
+            audio_waveform = torchaudio.functional.resample(
+                audio_waveform,
+                sampling_rate,
+                sample_rate
+            )
         if normalize_input:
-            audio_waveform = torch.nn.functional.layer_norm(audio_waveform, audio_waveform.shape)
+            # following fairseq raw audio dataset
+            audio_waveform = torch.nn.functional.layer_norm(
+                audio_waveform,
+                audio_waveform.shape
+            )
 
         return audio_waveform
 
     @torch.inference_mode()
-    def _compute_emissions(self, audio_input: torch.Tensor, asr_model: fairseq.models.FairseqEncoder, cuda) -> torch.Tensor:
+    def _compute_emissions(
+        self,
+        audio_input: torch.Tensor,
+        asr_model: fairseq.models.FairseqEncoder,
+        cuda
+    ) -> torch.Tensor:
         """
         Compute the emissions for either fairseq or huggingface asr model
 
@@ -75,16 +98,27 @@ class TranscribeAudio(StopesModule):
 
         if cuda:
             audio_input = audio_input.to("cuda")
-        if isinstance(asr_model, fairseq.models.wav2vec.wav2vec2_asr.Wav2VecCtc):
-            padding_mask = lengths_to_padding_mask(torch.tensor([audio_input.numel()]))
-            emissions = asr_model.w2v_encoder(audio_input, padding_mask)["encoder_out"].transpose(0, 1)
+        if isinstance(
+            asr_model, fairseq.models.wav2vec.wav2vec2_asr.Wav2VecCtc
+        ):
+            padding_mask = lengths_to_padding_mask(
+                torch.tensor([audio_input.numel()])
+            )
+            emissions = asr_model.w2v_encoder(
+                audio_input,
+                padding_mask
+            )["encoder_out"].transpose(0, 1)
         else:
             emissions = asr_model(audio_input).logits
 
         return emissions
 
-
-    def _decode_emissions(self,emissions: torch.Tensor, decoder, post_process_fn) -> str:
+    def _decode_emissions(
+        self,
+        emissions: torch.Tensor,
+        decoder,
+        post_process_fn
+    ) -> str:
         """
         Decode the emissions and apply post-process functions
 
@@ -106,7 +140,7 @@ class TranscribeAudio(StopesModule):
 
         return hypo
 
-    def _merge_tailo_init_final(self, text) -> tp.List[str]:
+    def _merge_tailo_init_final(self, text):
         """
         Hokkien ASR hypothesis post-processing.
         """
@@ -124,16 +158,10 @@ class TranscribeAudio(StopesModule):
             results.append(last_syllable)
         return " ".join(results)
 
-    def _remove_tone(self, text) -> str:
-        """
-        Used for tone-less evaluation of Hokkien
-        """
-        return " ".join([t[:-1] for t in text.split()])
-
     def _transcribe_audiofile(
-        self,  
+        self,
         asr_model,
-        audio_path: str, 
+        audio_path: str,
         lower=True
     ) -> str:
         """
@@ -148,42 +176,63 @@ class TranscribeAudio(StopesModule):
             hypo: the transcription result
         """
 
-        asr_input = self._load_audiofile(audio_path, asr_model.sampling_rate, asr_model.normalize_input)
-        emissions = self._compute_emissions(asr_input, asr_model.model, asr_model.use_cuda)
-        hypo = self._decode_emissions(emissions, asr_model.decoder, asr_model.post_process_fn)
+        asr_input = self._load_audiofile(
+            audio_path,
+            asr_model.sampling_rate,
+            asr_model.normalize_input
+        )
+        emissions = self._compute_emissions(
+            asr_input,
+            asr_model.model,
+            asr_model.use_cuda
+        )
+        hypo = self._decode_emissions(
+            emissions,
+            asr_model.decoder,
+            asr_model.post_process_fn
+        )
 
         return hypo.strip().lower() if lower else hypo.strip()
 
-    def run(self, 
-            iteration_value: tp.Optional[tp.Any] = None,
-            iteration_index: int = 0,
+    def run(
+        self,
+        iteration_value: tp.Optional[tp.Any] = None,
+        iteration_index: int = 0,
     ) -> tp.List[str]:
-        
+
         assert iteration_value is not None, "Iteration value is null"
         self.logger = logging.getLogger("stopes.asr_bleu.transcribe_audio")
-        asr_model = ASRGenerator(iteration_value.asr_config)
+        asr_config = retrieve_asr_config(
+            iteration_value.lang,
+            iteration_value.asr_version,
+            json_path="/home/john/Desktop/STOPES/stopes/stopes/pipelines/asr_bleu/conf/asr_models/asr_model_cfgs.json"
+        )
+        asr_model = ASRContainer(asr_config)
 
         prediction_transcripts = []
- 
+
         for prediction in tqdm(
-            iterable = iteration_value.eval_manifest["prediction"],
+            iterable=iteration_value.eval_manifest["prediction"],
             desc="Transcribing predictions",
-            total=len(iteration_value.eval_manifest["prediction"]),):
+            total=len(iteration_value.eval_manifest["prediction"]),
+        ):
             self.logger.info(f"Transcribing {prediction}")
             transcription = self._transcribe_audiofile(asr_model, prediction)
             prediction_transcripts.append(transcription.lower())
-        
-        if iteration_value.asr_config.lang == "hok":
+
+        if iteration_value.lang == "hok":
             prediction_transcripts = [
-                self.merge_tailo_init_final(text) for text in prediction_transcripts
+                self._merge_tailo_init_final(
+                    text
+                ) for text in prediction_transcripts
             ]
-        
+
         return prediction_transcripts
 
-async def transcribe_audio(   
-    eval_manifests: tp.List[tp.Dict[str, tp.List]],
+
+async def transcribe_audio(
+    retrieved_data: tp.List[tp.Dict[str, tp.List]],
     launcher: Launcher,
-    asr_config,
 ) -> tp.List[tp.List[str]]:
     """
     Transcribes audio from a list of audio files
@@ -192,9 +241,10 @@ async def transcribe_audio(
     """
     transcribe_audio_jobs = [
         TranscribeAudioJob(
-            eval_manifest=eval_manifest,
-            asr_config=asr_config,
-        ) for eval_manifest in eval_manifests
+            eval_manifest=retrieved_dataset[0],
+            lang=retrieved_dataset[1],
+            asr_version=retrieved_dataset[2]
+        ) for retrieved_dataset in retrieved_data
     ]
     transcribe_audio_module = TranscribeAudio(
         TranscribeAudioConfig(
@@ -202,5 +252,5 @@ async def transcribe_audio(
         ),
     )
     transcribed_audio = await launcher.schedule(transcribe_audio_module)
-   
+
     return transcribed_audio
