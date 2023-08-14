@@ -1,8 +1,8 @@
 import asyncio
 import logging
+import typing as tp
 
 from stopes.pipelines.asr_bleu.configs import AsrBleuConfig
-from stopes.pipelines.asr_bleu.utils import retrieve_asr_config
 from stopes.pipelines.asr_bleu.transcribe_audio import transcribe_audio
 from stopes.pipelines.asr_bleu.retrieve_data import retrieve_data
 from stopes.core import utils
@@ -27,45 +27,35 @@ class AsrBleu:
         )
 
         OmegaConf.set_readonly(self.config, True)
-        # utils.ensure_dir(self.config.output_dir)
 
     async def run(self):
-        # 1. Retrieve ASR configuration 
-        logger.info("Setting up ASR model...")
-        asr_config = retrieve_asr_config(self.config.corpora.lang, self.config.corpora.asr_version, 
-                                         json_path="../../../conf/asr_models/asr_model_cfgs.json")
-
-        # 2. Compose evaluation data.
+        # 1. Compose evaluation data.
         logger.info("Composing evaluation data...")
-        eval_manifests = await retrieve_data([
-                (self.config.corpora.audio_dirpath, 
-                 self.config.corpora.reference_path,
-                 self.config.corpora.audio_format,
-                 self.config.corpora.reference_format,
-                 self.config.corpora.reference_tsv_column,)
-            ], 
+        retrieved_data = await retrieve_data(
+            self.config.corpora,
             self.launcher,
-            self.retrieved_data_dir,
         )
 
-        # 3. Transcribe audio predictions and compute BLEU score.
+        # 2. Transcribe audio predictions and compute BLEU score.
         logger.info("Transcribing audio predictions...")
         transcribed_audio = await transcribe_audio(
-            eval_manifests,
+            retrieved_data,
             self.launcher,
-            asr_config,
         )
 
-        # 4. Compute BLEU score
+        # 3. Compute BLEU score
         logger.info("Computing BLEU scores...")
         bleu_scores = []
         for i, prediction_transcripts in enumerate(transcribed_audio):
-            references = eval_manifests[i]["reference"]
-            bleu_score = sacrebleu.corpus_bleu(prediction_transcripts, [references])
+            references = retrieved_data[i][0]["reference"]
+            bleu_score = sacrebleu.corpus_bleu(
+                prediction_transcripts,
+                [references]
+            )
             bleu_scores.append(bleu_score)
-            print(bleu_score)
-          
-        # 5. Save the BLEU score
+            logger.info(bleu_score)
+
+        # 4. Save the BLEU score
         bleu_scores_file = self.output_dir / "bleu_scores"
 
         with open(bleu_scores_file, "w") as f:
@@ -73,17 +63,17 @@ class AsrBleu:
                 f.write(str(score) + "\n")
 
         return transcribed_audio, bleu_scores
-    
+
     def ensure_all_dirs(self) -> None:
         self.output_dir = Path(self.config.output_dir).resolve()
-        self.retrieved_data_dir = self.output_dir / "retrieved_data"
         utils.ensure_dir(self.output_dir)
-        utils.ensure_dir(self.retrieved_data_dir)
+
 
 @hydra.main(config_path="conf", config_name="asr_bleu")
 def main(config: AsrBleuConfig) -> None:
     pipeline = AsrBleu(config)
     asyncio.run(pipeline.run())
 
+
 if __name__ == "__main__":
-    main()        
+    main()
