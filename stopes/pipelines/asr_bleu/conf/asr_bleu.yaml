@@ -1,6 +1,6 @@
 defaults:
   - launcher: local
-  - testing: corpora.yaml
+  - testing: corpora2.yaml
   - _self_
 
 output_dir: ???
