@@ -205,7 +205,7 @@ class TranscribeAudio(StopesModule):
         asr_config = retrieve_asr_config(
             iteration_value.lang,
             iteration_value.asr_version,
-            json_path="/home/john/Desktop/STOPES/stopes/stopes/pipelines/asr_bleu/conf/asr_models/asr_model_cfgs.json"
+            json_path="../../../conf/asr_models/asr_model_cfgs.json"
         )
         asr_model = ASRContainer(asr_config)
 
