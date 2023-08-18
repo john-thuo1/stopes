@@ -1,10 +1,10 @@
 import json
-import re
 import logging
-import urllib.request
 from pathlib import Path
-
+import typing as tp
 import fairseq
+
+
 import torch
 from tqdm import tqdm
 
@@ -35,13 +35,13 @@ def retrieve_asr_config(
     lang_key: str,
     asr_version: str,
     json_path: str
-) -> dict:
+) -> tp.Dict:
     if len(lang_key) != 3:
         raise ValueError(
             f"'{lang_key}' lang key for language type must be 3 characters!"
         )
 
-    with utils.open(json_path, "r") as f:
+    with open(json_path, "r") as f:
         asr_model_cfgs = json.load(f)
     return asr_model_cfgs[lang_key][asr_version]
 
@@ -51,7 +51,7 @@ class ASRContainer(object):
 
     def __init__(
         self,
-        model_cfg: dict,
+        model_cfg: tp.Dict,
         cache_dirpath: str = (Path.home() / ".cache" / "ust_asr").as_posix(),
     ) -> None:
         """
@@ -110,7 +110,7 @@ class ASRContainer(object):
             blank_token=self.blank_token,
         )
 
-    def prepare_hf_model(self, model_cfg: dict) -> None:
+    def prepare_hf_model(self, model_cfg: tp.Dict) -> None:
         """
         Prepare the huggingface asr model
 
@@ -133,7 +133,6 @@ class ASRContainer(object):
                 raise RuntimeError(
                     "Silence token is not found in the vocabulary"
                 )
-
         try:
             from transformers import (AutoFeatureExtractor, AutoTokenizer,
                                       Wav2Vec2ForCTC, Wav2Vec2Processor)
@@ -152,64 +151,29 @@ class ASRContainer(object):
             self.tokenizer.decoder.get(i, f"{self.tokenizer.unk_token}1")
             for i in range(self.tokenizer.vocab_size)
         ]
-
         self.sampling_rate = self.preprocessor.sampling_rate
         self.normalize_input = self.preprocessor.do_normalize
         self.tokens = vocab_list
         self.sil_token = infer_silence_token(vocab_list)
         self.blank_token = self.tokenizer.pad_token
 
-    def prepare_fairseq_model(self, model_cfg: dict) -> None:
-        """
-        Prepare the fairseq asr model
+    def prepare_fairseq_model(self, model_cfg: tp.Dict) -> None:
+        ckpt_path = model_cfg["ckpt_path"]
+        dict_path = model_cfg["dict_path"]
+        lang_post = model_cfg["post_process"]
 
-        Args:
-            model_cfg: the specific model config dict must have:
-            (1) ckpt_path, (2) dict_path
-        """
-
-        def download_file(url: str, cache_dir: Path):
-            download_path = cache_dir / url.split("/")[-1]
-            if not (cache_dir / url.split("/")[-1]).exists():
-                with DownloadProgressBar(
-                    unit="B",
-                    unit_scale=True,
-                    miniters=1,
-                    desc=url.split("/")[-1]
-                ) as t:
-                    cache_dir.mkdir(parents=True, exist_ok=True)
-                    urllib.request.urlretrieve(
-                        url,
-                        filename=download_path.as_posix(),
-                        reporthook=t.update_to
-                    )
-            else:
-                logger.info(f"'{url}' exists in {cache_dir}")
-
-            return download_path.as_posix()
-
-        try:
-            ckpt_path = model_cfg["ckpt_path"]
-            dict_path = model_cfg["dict_path"]
-        except KeyError:
-            raise KeyError(
-                "Fairseq model cfg must provide (1) ckpt_path, (2) dict_path"
-            )
-
-        if re.search("^https", ckpt_path):
-            ckpt_path = download_file(ckpt_path, self.cache_dirpath)
-        if re.search("^https", dict_path):
-            dict_path = download_file(dict_path, self.cache_dirpath)
-
-        model, saved_cfg, _ = \
-            fairseq.checkpoint_utils.load_model_ensemble_and_task(
+        logger.info(f"language post process : {lang_post}")
+        logger.info(f"Checkpoint path : {ckpt_path}")
+        logger.info(f"Dictionary  path : {dict_path}")
+        model, saved_cfg, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
                 [ckpt_path],
                 arg_overrides={
                     "task": "audio_finetuning",
                     "data": self.cache_dirpath.as_posix(),
                 },  # data must have dict in it
             )
-
+        
+        logger.info(f"Saved_cfg path : {saved_cfg}")
         dict_lines = utils.open(dict_path, "r").readlines()
         tokens = [line.split()[0] for line in dict_lines]
         # adding default fairseq special tokens
@@ -221,9 +185,7 @@ class ASRContainer(object):
         if "|" in tokens:
             self.sil_token = "|"
         else:
-            self.sil_token = tokens[
-                2
-            ]  # use eos as silence token if | not presented e.g. Hok ASR model
+            self.sil_token = tokens[2]  # use eos as silence token if | not presented e.g. Hok ASR model
         logger.info(f"Inferring silence token from the dict: {self.sil_token}")
         self.blank_token = self.tokens[0]
 
