@@ -19,7 +19,7 @@ class AsrBleu:
     def __init__(self, config: AsrBleuConfig):
         self.config = config
         self.ensure_all_dirs()
-        self.config.launcher.cache.caching_dir = Path(self.output_dir) / "cache"
+        self.config.launcher.cache.caching_dir = str(Path(self.output_dir) / "cache")
         self.launcher = hydra.utils.instantiate(self.config.launcher)
         OmegaConf.save(
             config=config,
