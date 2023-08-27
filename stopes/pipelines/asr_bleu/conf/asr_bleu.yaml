@@ -3,11 +3,12 @@ defaults:
   - testing: corpora2.yaml
   - _self_
 
-output_dir: ???
-
 launcher:
   partition: ???  # set as null if running locally
   cache:
     caching_dir: ${output_dir}/cache  # Cache won't be re-used if you change the output_dir
 
+
 corpora: ???
+
+output_dir: ???
