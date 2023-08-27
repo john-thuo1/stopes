@@ -1,17 +1,20 @@
-from dataclasses import dataclass
 import typing as tp
+from dataclasses import dataclass
+
 
 @dataclass
 class Dataset:
     lang: str
+    config_key: str
     audio_dirpath: str
     reference_path: str
     reference_format: str
-    asr_version: str = "oct22"
-    reference_tsv_column: str = None
+    reference_tsv_column: str
+    results_dirpath: str
+    transcripts_path: str
+    asr_version: str 
     audio_format: str = "n_pred.wav"
-    results_dirpath: str = None
-    transcripts_path: str = None
+
 
 
 @dataclass
@@ -22,4 +25,5 @@ class CorporaConfig:
 @dataclass
 class AsrBleuConfig:
     launcher: tp.Dict[str, tp.Any]
+    output_dir: str
     corpora: CorporaConfig
