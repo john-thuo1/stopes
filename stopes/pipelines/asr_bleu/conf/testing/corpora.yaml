@@ -1,0 +1,27 @@
+# @package _global_
+corpora:
+  datasets:
+    test1:
+      lang: "fra"  
+      config_key: 
+      audio_dirpath: "../../../Audio/fra_audio"
+      reference_path: "../../../References/fra_reference.txt"  
+      reference_format: "txt"  
+      asr_version: "oct22"  
+      reference_tsv_column: null  
+      audio_format: "n_pred.wav"  
+      results_dirpath: null  
+      transcripts_path: null
+    test2:
+      lang: "spa"  
+      audio_dirpath: "../../../Audio/spa_audio"
+      reference_path: "../../../References/spa_reference.txt"  
+      reference_format: "txt"  
+      asr_version: "oct22"  
+      reference_tsv_column: null  
+      audio_format: "n_pred.wav"  
+      results_dirpath: null  
+      transcripts_path: null
+      
+
+output_dir: ../../../data_output
